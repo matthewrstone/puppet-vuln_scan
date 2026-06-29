@@ -45,13 +45,18 @@ pinned version it re-runs only when the installed version differs.
 Runs the installed Trivy binary and returns a **compact** vulnerability report;
 PVS collects the per-node output and normalizes it for Puppet VR.
 
-It's a single cross-platform Ruby task (runs via the Puppet agent's bundled Ruby
-on Linux and Windows). Rather than returning Trivy's full JSON — which includes
-long descriptions, reference-URL lists, and multi-source CVSS, and can exceed the
-orchestrator/PCP message-size limit (64 MiB) — the task trims the output on the
-node to just the fields PVS needs: `id`, `pkg`, `installed`, `fixed`, `type`,
-`severity`, `title` (truncated), and CVSS `score`. In testing this cut a realistic
-report by ~96%.
+Implementations: `trivy.sh` (Linux/shell) and `trivy.ps1` (Windows/PowerShell).
+Each runs Trivy, then trims the JSON on the node by invoking the **Puppet agent's
+bundled Ruby** at its known absolute path (`/opt/puppetlabs/puppet/bin/ruby` on
+Linux; `…\Puppet\puppet\bin\ruby.exe` on Windows) to run the shared
+`files/trim.rb` helper — so there is no dependency on a `ruby` being on the
+target's PATH.
+
+Rather than returning Trivy's full JSON — which includes long descriptions,
+reference-URL lists, and multi-source CVSS, and can exceed the orchestrator/PCP
+message-size limit (64 MiB) — the task returns only the fields PVS needs: `id`,
+`pkg`, `installed`, `fixed`, `type`, `severity`, `title` (truncated), and CVSS
+`score`. In testing this cut a realistic report by ~95%.
 
 Parameters: `scan_type` (rootfs|fs|image), `target`, `severities`, `trivy_path`,
 `timeout`. To shrink further, pass `severities` (e.g. `CRITICAL,HIGH`) to scan

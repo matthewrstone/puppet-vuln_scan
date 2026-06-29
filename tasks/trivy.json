@@ -22,8 +22,10 @@
       "type": "Optional[String]"
     }
   },
-  "input_method": "stdin",
+  "input_method": "environment",
+  "files": ["vuln_scan/files/trim.rb"],
   "implementations": [
-    {"name": "trivy.rb"}
+    {"name": "trivy.sh",  "requirements": ["shell"]},
+    {"name": "trivy.ps1", "requirements": ["powershell"]}
   ]
 }
