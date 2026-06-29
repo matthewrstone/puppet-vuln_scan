@@ -22,9 +22,8 @@
       "type": "Optional[String]"
     }
   },
-  "input_method": "environment",
+  "input_method": "stdin",
   "implementations": [
-    {"name": "trivy.sh", "requirements": ["shell"]},
-    {"name": "trivy.ps1", "requirements": ["powershell"]}
+    {"name": "trivy.rb"}
   ]
 }

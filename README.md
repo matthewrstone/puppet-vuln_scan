@@ -42,8 +42,35 @@ pinned version it re-runs only when the installed version differs.
 
 ## Scan task (`vuln_scan::trivy`)
 
-Runs the installed Trivy binary and returns its raw JSON report; PVS collects the
-per-node output and normalizes it for Puppet VR.
+Runs the installed Trivy binary and returns a **compact** vulnerability report;
+PVS collects the per-node output and normalizes it for Puppet VR.
+
+It's a single cross-platform Ruby task (runs via the Puppet agent's bundled Ruby
+on Linux and Windows). Rather than returning Trivy's full JSON — which includes
+long descriptions, reference-URL lists, and multi-source CVSS, and can exceed the
+orchestrator/PCP message-size limit (64 MiB) — the task trims the output on the
+node to just the fields PVS needs: `id`, `pkg`, `installed`, `fixed`, `type`,
+`severity`, `title` (truncated), and CVSS `score`. In testing this cut a realistic
+report by ~96%.
+
+Parameters: `scan_type` (rootfs|fs|image), `target`, `severities`, `trivy_path`,
+`timeout`. To shrink further, pass `severities` (e.g. `CRITICAL,HIGH`) to scan
+fewer findings.
+
+Output schema (`format: pvs-trivy-compact`):
+
+```json
+{
+  "format": "pvs-trivy-compact",
+  "version": 1,
+  "os": { "family": "ubuntu", "name": "22.04" },
+  "findings": [
+    { "id": "CVE-2023-4911", "pkg": "libc6", "installed": "2.35-0ubuntu3.1",
+      "fixed": "2.35-0ubuntu3.4", "type": "ubuntu", "severity": "HIGH",
+      "title": "glibc: buffer overflow…", "score": 7.8 }
+  ]
+}
+```
 
 ## Task: `vuln_scan::trivy`
 
