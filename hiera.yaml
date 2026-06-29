@@ -1,0 +1,12 @@
+---
+version: 5
+
+defaults:  # Used for any hierarchy level that omits these keys.
+  datadir: data         # This path is relative to hiera.yaml's directory.
+  data_hash: yaml_data  # Use the built-in YAML backend.
+
+# Pattern-matching the benchmarks is difficult due to benchmark
+# naming convetions. Please favor using explicit paths.
+hierarchy:
+  - name: 'common'
+    path: 'common.yaml'
