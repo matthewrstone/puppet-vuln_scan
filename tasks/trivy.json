@@ -1,0 +1,30 @@
+{
+  "description": "Run a Trivy vulnerability scan on the node and return the raw Trivy JSON report. Trivy must already be installed (e.g. via a Puppet class or Bolt install task).",
+  "parameters": {
+    "scan_type": {
+      "description": "Trivy subcommand to run: rootfs (host OS packages), fs (a filesystem path), or image.",
+      "type": "Enum[rootfs, fs, image]"
+    },
+    "target": {
+      "description": "What Trivy scans. For rootfs/fs this is a path (default '/'); for image it is an image reference.",
+      "type": "Optional[String]"
+    },
+    "severities": {
+      "description": "Comma-separated severities to include, e.g. 'CRITICAL,HIGH,MEDIUM'. Empty means all.",
+      "type": "Optional[String]"
+    },
+    "trivy_path": {
+      "description": "Absolute path to the trivy binary if it is not on PATH.",
+      "type": "Optional[String]"
+    },
+    "timeout": {
+      "description": "Trivy scan timeout, e.g. '10m'.",
+      "type": "Optional[String]"
+    }
+  },
+  "input_method": "environment",
+  "implementations": [
+    {"name": "trivy.sh", "requirements": ["shell"]},
+    {"name": "trivy.ps1", "requirements": ["powershell"]}
+  ]
+}

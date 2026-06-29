@@ -1,0 +1,35 @@
+<%- | String[1] $version, String[1] $install_dir, String[1] $download_base | -%>
+# Managed by Puppet (vuln_scan::install). Installs Trivy on Windows.
+$ErrorActionPreference = 'Stop'
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
+$version     = '<%= $version %>'
+$installDir  = '<%= $install_dir %>'
+$downloadBase = '<%= $download_base %>'
+
+# Resolve 'latest' to a concrete version via the GitHub releases API.
+if ($version -eq 'latest') {
+  $rel = Invoke-RestMethod -UseBasicParsing -Uri 'https://api.github.com/repos/aquasecurity/trivy/releases/latest'
+  $version = $rel.tag_name.TrimStart('v')
+}
+
+$asset = "trivy_${version}_windows-64bit.zip"
+$url   = "$downloadBase/v$version/$asset"
+$zip   = Join-Path $env:TEMP $asset
+
+Write-Output "Downloading $url"
+Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $zip
+
+if (-not (Test-Path $installDir)) {
+  New-Item -ItemType Directory -Force -Path $installDir | Out-Null
+}
+Expand-Archive -Path $zip -DestinationPath $installDir -Force
+Remove-Item $zip -Force -ErrorAction SilentlyContinue
+
+# Ensure the install dir is on the system PATH.
+$machinePath = [Environment]::GetEnvironmentVariable('Path', 'Machine')
+if ($machinePath -notlike "*$installDir*") {
+  [Environment]::SetEnvironmentVariable('Path', "$machinePath;$installDir", 'Machine')
+}
+
+& (Join-Path $installDir 'trivy.exe') --version
