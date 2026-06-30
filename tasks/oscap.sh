@@ -22,10 +22,30 @@ parser="${PT__installdir}/vuln_scan/files/oscap_parse.rb"
 
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
 
+# No feed given? Derive the distro OVAL feed from the node's own /etc/os-release.
+if [ -z "$oval_file" ] && [ -z "$oval_url" ] && [ -r /etc/os-release ]; then
+  . /etc/os-release 2>/dev/null
+  case "$ID" in
+    ubuntu)
+      code="${VERSION_CODENAME:-$UBUNTU_CODENAME}"
+      [ -n "$code" ] && oval_url="https://security-metadata.canonical.com/oval/com.ubuntu.${code}.usn.oval.xml.bz2" ;;
+    debian)
+      [ -n "$VERSION_CODENAME" ] && oval_url="https://www.debian.org/security/oval/oval-definitions-${VERSION_CODENAME}.xml.bz2" ;;
+    rhel|centos|rocky|almalinux|ol|fedora)
+      major="${VERSION_ID%%.*}"
+      [ -n "$major" ] && oval_url="https://www.redhat.com/security/data/oval/v2/RHEL${major}/rhel-${major}.oval.xml.bz2" ;;
+    *)
+      case " $ID_LIKE " in
+        *rhel*|*fedora*) major="${VERSION_ID%%.*}"; [ -n "$major" ] && oval_url="https://www.redhat.com/security/data/oval/v2/RHEL${major}/rhel-${major}.oval.xml.bz2" ;;
+        *debian*) [ -n "$VERSION_CODENAME" ] && oval_url="https://www.debian.org/security/oval/oval-definitions-${VERSION_CODENAME}.xml.bz2" ;;
+      esac ;;
+  esac
+fi
+
 # Obtain the OVAL definitions file (param path, or download the feed).
 if [ -z "$oval_file" ]; then
   [ -n "$oval_url" ] || emit_error "vuln_scan/oval-missing" \
-    "Provide oval_file or oval_url (the distro OVAL feed)."
+    "No OVAL feed for this node (ID='${ID:-unknown}', VERSION_ID='${VERSION_ID:-?}'). Pass oval_url for this distro, or oval_file."
   if printf '%s' "$oval_url" | grep -q '\.bz2$'; then
     curl -sfL "$oval_url" -o "$tmp/oval.xml.bz2" || emit_error "vuln_scan/download-failed" "Could not download OVAL feed."
     bunzip2 "$tmp/oval.xml.bz2" || emit_error "vuln_scan/decompress-failed" "Could not decompress OVAL feed."
