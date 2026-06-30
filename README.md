@@ -86,6 +86,29 @@ Implementations: `trivy.sh` (Linux/shell) and `trivy.ps1` (Windows/PowerShell).
 > manifest/class (or a separate Bolt task). If Trivy is missing, the task returns a
 > structured `_error` so PVS can surface it.
 
+## OpenSCAP tasks + prerequisites
+
+Two OpenSCAP tasks ship alongside Trivy:
+
+- **`vuln_scan::oscap`** — OVAL CVE evaluation (auto-derives the distro OVAL feed).
+- **`vuln_scan::oscap_xccdf`** — XCCDF benchmark scoring (CIS / STIG / PCI / HIPAA)
+  against the node's SCAP Security Guide datastream.
+
+Both need the OpenSCAP toolchain and (for XCCDF) the SSG content on the node. Classify
+your OpenSCAP targets with **`vuln_scan::oscap_prereqs`** so it's all managed:
+
+```puppet
+include vuln_scan::oscap_prereqs
+```
+
+It installs, per OS family: the **oscap scanner** (`libopenscap8` on Debian/Ubuntu,
+`openscap-scanner` on RHEL-family), **bzip2 / xz** (for compressed OVAL feeds), and the
+**SSG content** (`ssg-base` + `ssg-debderived` on Debian/Ubuntu,
+`scap-security-guide` on RHEL-family) — datastreams land in
+`/usr/share/xml/scap/ssg/content/`. Params: `manage_content` (default true),
+`scanner_packages` / `content_packages` (override the lists for other distros),
+`package_ensure`.
+
 ## Deploy to PE
 
 Add the module to your control repo so Code Manager syncs it to environments:
