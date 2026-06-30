@@ -4,6 +4,9 @@
 # (ARGV[0]) plus the OVAL definitions file (ARGV[1]) and prints a COMPACT CVE
 # report on stdout — the same field shape PSM's Trivy task emits.
 #
+# Extracts, per vulnerable definition: CVE reference(s), title, advisory severity,
+# and the affected package + fixed version (from the dpkginfo tests/objects/states).
+#
 # Run with the Puppet agent's bundled Ruby (stdlib REXML/JSON, no gems).
 
 require 'rexml/document'
@@ -12,6 +15,11 @@ require 'json'
 def emit_error(kind, msg)
   puts({ '_error' => { 'kind' => kind, 'msg' => msg, 'details' => {} } }.to_json)
   exit 1
+end
+
+def strip_epoch(evr)
+  return nil unless evr && !evr.empty?
+  evr.sub(/\A\d+:/, '')
 end
 
 begin
@@ -28,14 +36,47 @@ results.each_element('//*[local-name()="definition"]') do |d|
   true_ids[id] = true if id && d.attributes['result'] == 'true'
 end
 
-# Map RedHat-style advisory severities onto the canonical ladder.
-SEV = { 'Critical' => 'CRITICAL', 'Important' => 'HIGH',
-        'Moderate' => 'MEDIUM', 'Low' => 'LOW' }.freeze
+# Index dpkginfo tests -> object/state, objects -> package name, states -> fixed evr.
+test_obj = {}
+test_states = {}
+definitions.each_element('//*[local-name()="dpkginfo_test"]') do |t|
+  tid = t.attributes['id']
+  next unless tid
+  t.each_element('./*[local-name()="object"]') { |o| test_obj[tid] = o.attributes['object_ref'] }
+  states = []
+  t.each_element('./*[local-name()="state"]') { |s| states << s.attributes['state_ref'] }
+  test_states[tid] = states
+end
+
+obj_pkg = {}
+definitions.each_element('//*[local-name()="dpkginfo_object"]') do |o|
+  oid = o.attributes['id']
+  next unless oid
+  o.each_element('./*[local-name()="name"]') { |n| obj_pkg[oid] ||= n.text }
+end
+
+state_fixed = {}
+definitions.each_element('//*[local-name()="dpkginfo_state"]') do |s|
+  sid = s.attributes['id']
+  next unless sid
+  s.each_element('./*[local-name()="evr"]') { |e| state_fixed[sid] ||= strip_epoch(e.text) }
+end
+
+# Advisory severities across distros -> canonical ladder (case-insensitive).
+SEV = {
+  'critical' => 'CRITICAL', 'high' => 'HIGH', 'important' => 'HIGH',
+  'medium' => 'MEDIUM', 'moderate' => 'MEDIUM',
+  'low' => 'LOW', 'negligible' => 'LOW'
+}.freeze
 
 findings = []
+seen = {}
 definitions.each_element('//*[local-name()="definition"]') do |d|
   id = d.attributes['id']
   next unless id && true_ids[id]
+  # Skip non-vulnerability definitions (inventory/compliance/miscellaneous noise).
+  klass = d.attributes['class']
+  next if klass && !%w[vulnerability patch].include?(klass)
 
   title = nil
   severity = nil
@@ -48,16 +89,35 @@ definitions.each_element('//*[local-name()="definition"]') do |d|
     end
   end
 
-  sev = SEV[severity] || 'UNKNOWN'
+  # Affected package(s) + fixed version from the definition's dpkginfo criteria.
+  pkgs = []
+  d.each_element('.//*[local-name()="criterion"]') do |c|
+    tref = c.attributes['test_ref']
+    next unless tref && test_obj.key?(tref)
+    name = obj_pkg[test_obj[tref]]
+    next unless name
+    fixed = nil
+    (test_states[tref] || []).each { |sid| fixed ||= state_fixed[sid] }
+    pkgs << [name, fixed]
+  end
+  pkgs.uniq!
+
+  sev = SEV[(severity || '').downcase] || 'UNKNOWN'
   ids = cves.empty? ? [id] : cves.uniq
   ids.each do |cve|
-    findings << {
-      'id'       => cve,
-      'title'    => title ? title[0, 300] : cve,
-      'severity' => sev,
-      'pkg'      => nil,   # package/fixed-version extraction is a future enhancement
-      'fixed'    => nil,
-    }
+    rows = pkgs.empty? ? [[nil, nil]] : pkgs
+    rows.each do |(name, fixed)|
+      key = "#{cve}|#{name}|#{fixed}"
+      next if seen[key]
+      seen[key] = true
+      findings << {
+        'id'       => cve,
+        'title'    => title ? title[0, 300] : cve,
+        'severity' => sev,
+        'pkg'      => name,
+        'fixed'    => fixed,
+      }
+    end
   end
 end
 

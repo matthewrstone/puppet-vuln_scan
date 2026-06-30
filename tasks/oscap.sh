@@ -42,18 +42,41 @@ if [ -z "$oval_file" ] && [ -z "$oval_url" ] && [ -r /etc/os-release ]; then
   esac
 fi
 
-# Obtain the OVAL definitions file (param path, or download the feed).
+# Obtain the OVAL definitions file (param path, or download + decompress the feed).
 if [ -z "$oval_file" ]; then
   [ -n "$oval_url" ] || emit_error "vuln_scan/oval-missing" \
     "No OVAL feed for this node (ID='${ID:-unknown}', VERSION_ID='${VERSION_ID:-?}'). Pass oval_url for this distro, or oval_file."
-  if printf '%s' "$oval_url" | grep -q '\.bz2$'; then
-    curl -sfL "$oval_url" -o "$tmp/oval.xml.bz2" || emit_error "vuln_scan/download-failed" "Could not download OVAL feed."
-    bunzip2 "$tmp/oval.xml.bz2" || emit_error "vuln_scan/decompress-failed" "Could not decompress OVAL feed."
-    oval_file="$tmp/oval.xml"
-  else
-    curl -sfL "$oval_url" -o "$tmp/oval.xml" || emit_error "vuln_scan/download-failed" "Could not download OVAL feed."
-    oval_file="$tmp/oval.xml"
-  fi
+
+  dl="$tmp/oval.dl"
+  curl -sfL "$oval_url" -o "$dl" || emit_error "vuln_scan/download-failed" \
+    "Could not download OVAL feed from ${oval_url}."
+  [ -s "$dl" ] || emit_error "vuln_scan/download-failed" \
+    "Downloaded OVAL feed is empty (check the URL / proxy / outbound access)."
+
+  # Detect the real compression by magic bytes, not the file extension.
+  magic="$(head -c 6 "$dl" | od -An -tx1 | tr -d ' \n')"
+  oval_file="$tmp/oval.xml"
+  case "$magic" in
+    425a68*)  # "BZh" -> bzip2
+      command -v bunzip2 >/dev/null 2>&1 || emit_error "vuln_scan/decompress-failed" \
+        "OVAL feed is bzip2 but 'bzip2' is not installed on this node (install the bzip2 package)."
+      bunzip2 -c "$dl" > "$oval_file" 2>/dev/null || emit_error "vuln_scan/decompress-failed" "bunzip2 failed on the OVAL feed." ;;
+    1f8b*)    # gzip
+      command -v gunzip >/dev/null 2>&1 || emit_error "vuln_scan/decompress-failed" \
+        "OVAL feed is gzip but 'gzip' is not installed on this node."
+      gunzip -c "$dl" > "$oval_file" 2>/dev/null || emit_error "vuln_scan/decompress-failed" "gunzip failed on the OVAL feed." ;;
+    fd377a585a*)  # xz
+      if command -v unxz >/dev/null 2>&1; then unxz -c "$dl" > "$oval_file" 2>/dev/null
+      elif command -v xz >/dev/null 2>&1; then xz -dc "$dl" > "$oval_file" 2>/dev/null
+      else emit_error "vuln_scan/decompress-failed" "OVAL feed is xz but 'xz' is not installed on this node."; fi
+      [ -s "$oval_file" ] || emit_error "vuln_scan/decompress-failed" "xz decompress failed on the OVAL feed." ;;
+    3c3f786d*|3c4f5641*|efbbbf*|2020*|0a*|3c*)  # "<?xm", "<OVA", BOM, or leading whitespace/"<" -> plain XML
+      cp "$dl" "$oval_file" ;;
+    *)
+      # Unknown magic: if it looks like text/XML, use as-is; else fail clearly.
+      if head -c 512 "$dl" | grep -qi "<oval\|<?xml"; then cp "$dl" "$oval_file";
+      else emit_error "vuln_scan/decompress-failed" "Unrecognized OVAL feed format (magic=${magic}); expected bzip2/gzip/xz/xml."; fi ;;
+  esac
 fi
 
 results="$tmp/results.xml"
