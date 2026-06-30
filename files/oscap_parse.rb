@@ -36,6 +36,18 @@ results.each_element('//*[local-name()="definition"]') do |d|
   true_ids[id] = true if id && d.attributes['result'] == 'true'
 end
 
+# Installed package versions actually collected from the node (system characteristics
+# in the results file) -> {package => installed evr}, so findings carry the real
+# installed version, not just the fixed-version target.
+installed = {}
+results.each_element('//*[local-name()="dpkginfo_item"]') do |it|
+  name = nil
+  evr = nil
+  it.each_element('./*[local-name()="name"]') { |n| name ||= n.text }
+  it.each_element('./*[local-name()="evr"]') { |e| evr ||= e.text }
+  installed[name] ||= strip_epoch(evr) if name && evr && !evr.strip.empty?
+end
+
 # Index dpkginfo tests -> object/state, objects -> package name, states -> fixed evr.
 test_obj = {}
 test_states = {}
@@ -48,11 +60,33 @@ definitions.each_element('//*[local-name()="dpkginfo_test"]') do |t|
   test_states[tid] = states
 end
 
-obj_pkg = {}
+# Ubuntu OVAL lists affected binary packages in OVAL *variables*; dpkginfo objects
+# reference them by var_ref rather than carrying a literal package name.
+var_values = {}
+%w[constant_variable local_variable variable external_variable].each do |vt|
+  definitions.each_element(%(//*[local-name()="#{vt}"])) do |v|
+    vid = v.attributes['id']
+    next unless vid
+    vals = []
+    v.each_element('.//*[local-name()="value"]') { |val| vals << val.text.strip if val.text && !val.text.strip.empty? }
+    var_values[vid] = vals.uniq unless vals.empty?
+  end
+end
+
+# dpkginfo object -> list of package names (literal text and/or resolved var_ref).
+obj_pkgs = {}
 definitions.each_element('//*[local-name()="dpkginfo_object"]') do |o|
   oid = o.attributes['id']
   next unless oid
-  o.each_element('./*[local-name()="name"]') { |n| obj_pkg[oid] ||= n.text }
+  names = []
+  o.each_element('./*[local-name()="name"]') do |n|
+    if n.text && !n.text.strip.empty?
+      names << n.text.strip
+    elsif (ref = n.attributes['var_ref']) && var_values[ref]
+      names.concat(var_values[ref])
+    end
+  end
+  obj_pkgs[oid] = names.uniq unless names.empty?
 end
 
 state_fixed = {}
@@ -94,11 +128,11 @@ definitions.each_element('//*[local-name()="definition"]') do |d|
   d.each_element('.//*[local-name()="criterion"]') do |c|
     tref = c.attributes['test_ref']
     next unless tref && test_obj.key?(tref)
-    name = obj_pkg[test_obj[tref]]
-    next unless name
+    names = obj_pkgs[test_obj[tref]]
+    next unless names
     fixed = nil
     (test_states[tref] || []).each { |sid| fixed ||= state_fixed[sid] }
-    pkgs << [name, fixed]
+    names.each { |name| pkgs << [name, fixed] }
   end
   pkgs.uniq!
 
@@ -111,11 +145,12 @@ definitions.each_element('//*[local-name()="definition"]') do |d|
       next if seen[key]
       seen[key] = true
       findings << {
-        'id'       => cve,
-        'title'    => title ? title[0, 300] : cve,
-        'severity' => sev,
-        'pkg'      => name,
-        'fixed'    => fixed,
+        'id'        => cve,
+        'title'     => title ? title[0, 300] : cve,
+        'severity'  => sev,
+        'pkg'       => name,
+        'installed' => name ? installed[name] : nil,
+        'fixed'     => fixed,
       }
     end
   end

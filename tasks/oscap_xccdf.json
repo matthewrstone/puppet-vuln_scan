@@ -1,0 +1,22 @@
+{
+  "description": "Run an OpenSCAP XCCDF profile evaluation (CIS / STIG / PCI / HIPAA) against the node's SCAP Security Guide datastream and return a COMPACT compliance result (score + per-rule pass/fail). Linux only.",
+  "parameters": {
+    "profile": {
+      "description": "XCCDF profile id (e.g. 'cis_level1_server', or a full xccdf_org.ssgproject.content_profile_... id).",
+      "type": "String"
+    },
+    "datastream": {
+      "description": "Path to an SSG datastream XML. Auto-detected from the OS if omitted.",
+      "type": "Optional[String]"
+    },
+    "oscap_path": {
+      "description": "Path to the oscap binary if not on PATH.",
+      "type": "Optional[String]"
+    }
+  },
+  "input_method": "environment",
+  "files": ["vuln_scan/files/xccdf_parse.rb"],
+  "implementations": [
+    { "name": "oscap_xccdf.sh", "requirements": ["shell"] }
+  ]
+}
