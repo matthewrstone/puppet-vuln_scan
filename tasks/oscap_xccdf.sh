@@ -25,7 +25,11 @@ if [ -z "$datastream" ]; then
   ssg_dir="/usr/share/xml/scap/ssg/content"
   [ -r /etc/os-release ] && . /etc/os-release 2>/dev/null
   ver_major="${VERSION_ID%%.*}"
+  ver_nodot="${VERSION_ID//./}"
+  # SSG filenames drop the dot in the version, e.g. ssg-ubuntu2404-ds.xml,
+  # ssg-rhel9-ds.xml. Try nodot (Ubuntu), full, major (RHEL), then bare.
   for cand in \
+    "${ssg_dir}/ssg-${ID}${ver_nodot}-ds.xml" \
     "${ssg_dir}/ssg-${ID}${VERSION_ID}-ds.xml" \
     "${ssg_dir}/ssg-${ID}${ver_major}-ds.xml" \
     "${ssg_dir}/ssg-${ID}-ds.xml"; do
