@@ -1,0 +1,27 @@
+{
+  "description": "Run an OpenSCAP OVAL evaluation against a distro OVAL feed and return a COMPACT CVE report (same shape as vuln_scan::trivy). Linux only.",
+  "parameters": {
+    "oval_file": {
+      "description": "Path to an OVAL definitions file already present on the node.",
+      "type": "Optional[String]"
+    },
+    "oval_url": {
+      "description": "URL of the distro OVAL feed to download (supports .bz2). Required if oval_file is not given.",
+      "type": "Optional[String]"
+    },
+    "oscap_path": {
+      "description": "Path to the oscap binary if it is not on PATH.",
+      "type": "Optional[String]"
+    },
+    "timeout": {
+      "description": "Reserved for future use.",
+      "type": "Optional[String]"
+    }
+  },
+  "input_method": "environment",
+  "files": ["vuln_scan/files/oscap_parse.rb"],
+  "implementations": [
+    {"name": "oscap.sh",  "requirements": ["shell"]},
+    {"name": "oscap.ps1", "requirements": ["powershell"]}
+  ]
+}

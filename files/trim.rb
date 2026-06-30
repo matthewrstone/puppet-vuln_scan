@@ -44,6 +44,7 @@ findings = []
       'fixed'     => v['FixedVersion'],
       'type'      => pkg_type,
       'severity'  => v['Severity'],
+      'status'    => v['Status'],
       'title'     => title,
       'score'     => best_score(v['CVSS']),
     }
